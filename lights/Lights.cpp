@@ -63,7 +63,7 @@ Lights::Lights() {
     else if (!access(((mLEDUseRedAsWhite ? led_paths[RED] : led_paths[WHITE]) + "breath").c_str(), W_OK))
         mBreathType = LED_BREATH_BREATH;
     else
-        mBreathType = LED_BREATH_UNSUPPORTED;
+        mBreathType = LED_BREATH_TRIGGER;
 
     ReadFileToString(!access(kLCDFile.c_str(), F_OK) ? kLCDMaxFile : kLCDMaxFile2, &tempstr, true);
     if (!tempstr.empty()) {
@@ -105,7 +105,6 @@ ndk::ScopedAStatus Lights::getLights(std::vector<HwLight>* lights) {
 // device methods
 void Lights::setSpeakerLightLocked(const HwLightState& state) {
     uint32_t alpha, red, green, blue;
-    uint32_t blink;
     bool rc = true;
 
     // Extract brightness from AARRGGBB
@@ -121,22 +120,22 @@ void Lights::setSpeakerLightLocked(const HwLightState& state) {
         blue = (blue * alpha) / 0xFF;
     }
 
-    blink = (state.flashOnMs != 0 && state.flashOffMs != 0);
-
     switch (state.flashMode) {
         case FlashMode::HARDWARE:
         case FlashMode::TIMED:
             if (mWhiteLed) {
-                rc = setLedBreath(mLEDUseRedAsWhite ? RED : WHITE, blink);
+                rc = setLedBreath(state, mLEDUseRedAsWhite ? RED : WHITE);
             } else {
                 if (!!red)
-                    rc = setLedBreath(RED, blink);
+                    rc = setLedBreath(state, RED);
                 if (!!green)
-                    rc &= setLedBreath(GREEN, blink);
+                    rc &= setLedBreath(state, GREEN);
                 if (!!blue)
-                    rc &= setLedBreath(BLUE, blink);
+                    rc &= setLedBreath(state, BLUE);
             }
             if (rc)
+                break;
+            if (mBreathType == LED_BREATH_TRIGGER)
                 break;
             FALLTHROUGH_INTENDED;
         case FlashMode::NONE:
@@ -161,12 +160,20 @@ void Lights::handleSpeakerBatteryLocked() {
         return setSpeakerLightLocked(mNotification);
 }
 
-bool Lights::setLedBreath(led_type led, uint32_t value) {
+bool Lights::setLedBreath(const HwLightState& state, led_type led) {
+    bool blink = (state.flashOnMs != 0 && state.flashOffMs != 0);
+    bool rc;
+
     switch (mBreathType) {
         case LED_BREATH_BLINK:
-            return WriteToFile(led_paths[led] + "blink", value);
+            return WriteToFile(led_paths[led] + "blink", blink);
         case LED_BREATH_BREATH:
-            return WriteToFile(led_paths[led] + "breath", value);
+            return WriteToFile(led_paths[led] + "breath", blink);
+        case LED_BREATH_TRIGGER:
+            rc = WriteStringToFile("timer", led_paths[led] + "trigger");
+            rc &= WriteToFile(led_paths[led] + "delay_on", state.flashOnMs);
+            rc &= WriteToFile(led_paths[led] + "delay_off", state.flashOffMs);
+            return rc;
         default:
             break;
     }
@@ -174,6 +181,8 @@ bool Lights::setLedBreath(led_type led, uint32_t value) {
 }
 
 bool Lights::setLedBrightness(led_type led, uint32_t value) {
+    if (mBreathType == LED_BREATH_TRIGGER)
+        WriteStringToFile("none", led_paths[led] + "trigger");
     return WriteToFile(led_paths[led] + "brightness", value);
 }
 
