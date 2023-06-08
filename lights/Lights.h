@@ -51,6 +51,8 @@ private:
     std::string mBacklightNode;
     bool mWhiteLed;
     bool mBreath;
+    bool mLEDUseRedAsWhite;
+    int mLCDMaxBrightness;
     HwLightState mNotification;
     HwLightState mBattery;
 };
