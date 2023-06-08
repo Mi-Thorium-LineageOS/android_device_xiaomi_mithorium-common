@@ -57,10 +57,13 @@ Lights::Lights() {
     mBacklightNode = !access(kLCDFile.c_str(), F_OK) ? kLCDFile : kLCDFile2;
     mWhiteLed = !!access((led_paths[GREEN] + "brightness").c_str(), W_OK);
     mLEDUseRedAsWhite = mWhiteLed && !access((led_paths[RED] + "brightness").c_str(), F_OK);
-    if (mLEDUseRedAsWhite)
-        mBreath = (!access(((mLEDUseRedAsWhite ? led_paths[RED] : led_paths[WHITE]) + "blink").c_str(), W_OK) || !access(((mLEDUseRedAsWhite ? led_paths[RED] : led_paths[WHITE]) + "breath").c_str(), W_OK));
+
+    if (!access(((mLEDUseRedAsWhite ? led_paths[RED] : led_paths[WHITE]) + "blink").c_str(), W_OK))
+        mBreathType = LED_BREATH_BLINK;
+    else if (!access(((mLEDUseRedAsWhite ? led_paths[RED] : led_paths[WHITE]) + "breath").c_str(), W_OK))
+        mBreathType = LED_BREATH_BREATH;
     else
-        mBreath = (!access(((mWhiteLed ? led_paths[WHITE] : led_paths[RED]) + "blink").c_str(), W_OK) || !access(((mWhiteLed ? led_paths[WHITE] : led_paths[RED]) + "breath").c_str(), W_OK));
+        mBreathType = LED_BREATH_UNSUPPORTED;
 
     ReadFileToString(!access(kLCDFile.c_str(), F_OK) ? kLCDMaxFile : kLCDMaxFile2, &tempstr, true);
     if (!tempstr.empty()) {
@@ -159,10 +162,15 @@ void Lights::handleSpeakerBatteryLocked() {
 }
 
 bool Lights::setLedBreath(led_type led, uint32_t value) {
-    if (!access((led_paths[led] + "breath").c_str(), W_OK))
-        return WriteToFile(led_paths[led] + "breath", value);
-    else
-        return WriteToFile(led_paths[led] + "blink", value);
+    switch (mBreathType) {
+        case LED_BREATH_BLINK:
+            return WriteToFile(led_paths[led] + "blink", value);
+        case LED_BREATH_BREATH:
+            return WriteToFile(led_paths[led] + "breath", value);
+        default:
+            break;
+    }
+    return false;
 }
 
 bool Lights::setLedBrightness(led_type led, uint32_t value) {
